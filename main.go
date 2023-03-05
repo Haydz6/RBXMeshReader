@@ -23,6 +23,8 @@ func main() {
 		Mesh := ReadMesh(Binary)
 		MeshBytes, JSONErr := json.Marshal(Mesh)
 
+		println(File.Name())
+
 		if JSONErr != nil {
 			panic(JSONErr.Error())
 		}

@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-type Vector3 [3]float64
-type Vector2 [2]float64
+type Vector3 [3]float32
+type Vector2 [2]float32
 
-type FaceStruct [3]uint
+type FaceStruct [3]uint16
 type LODStruct []uint
 
 type VerticesStruct struct {
@@ -94,9 +94,9 @@ func ReadASCIIMesh(Mesh []byte) MeshStruct {
 	for i, Vector := range strings.Split(Data[2][1:][:len(Data[2])-1], "][") {
 		Coordinates := strings.Split(Vector, ",")
 
-		X, _ := strconv.ParseFloat(Coordinates[0], 64)
-		Y, _ := strconv.ParseFloat(Coordinates[1], 64)
-		Z, _ := strconv.ParseFloat(Coordinates[2], 64)
+		X, _ := strconv.ParseFloat(Coordinates[0], 32)
+		Y, _ := strconv.ParseFloat(Coordinates[1], 32)
+		Z, _ := strconv.ParseFloat(Coordinates[2], 32)
 
 		if Version == "1.00" {
 			X /= 2
@@ -104,7 +104,7 @@ func ReadASCIIMesh(Mesh []byte) MeshStruct {
 			X /= 2
 		}
 
-		Vector3 := Vector3{X, Y, Z}
+		Vector3 := Vector3{float32(X), float32(Y), float32(Z)}
 		Progress++
 
 		if Progress == 3 {
@@ -120,7 +120,7 @@ func ReadASCIIMesh(Mesh []byte) MeshStruct {
 		}
 	}
 
-	return MeshStruct{Header: MeshHeaderStruct{Version: Version, NumFaces: uint16(NumFaces)}, Vertices: AllVertices, Valid: true}
+	return MeshStruct{Header: MeshHeaderStruct{Version: Version, NumFaces: uint16(NumFaces), NumVerts: uint16(len(AllVertices))}, Vertices: AllVertices, Valid: true}
 }
 
 func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
@@ -149,15 +149,15 @@ func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
 	}
 
 	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumVerts)
-	ReadBytes(Reader, 16)
+	ReadBytes(Reader, 2)
 	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumFaces)
-	ReadBytes(Reader, 16)
+	ReadBytes(Reader, 2)
 
 	if VersionFloat >= 4.00 {
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_boneNamesBuffer)
-		ReadBytes(Reader, 16)
+		ReadBytes(Reader, 2)
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumSubsets)
-		ReadBytes(Reader, 16)
+		ReadBytes(Reader, 2)
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumHighQualityLODs)
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Unused)
 	}
@@ -166,7 +166,7 @@ func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
 
 	for i := 0; i < int(Mesh.Header.NumVerts); i++ {
 		Vertex := VerticesStruct{}
-		UV := Vector2{}
+		var UV Vector2
 
 		binary.Read(Reader, binary.LittleEndian, &Vertex.Position)
 		binary.Read(Reader, binary.LittleEndian, &Vertex.Normal)

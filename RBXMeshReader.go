@@ -38,6 +38,16 @@ type MeshHeaderStruct struct {
 	//VERSION 3.00
 	Sizeof_LOD uint16
 	NumLODs    uint16
+
+	//VERSION 4.00
+	LodType  uint16
+	NumBones uint16
+
+	Sizeof_boneNamesBuffer uint16
+	NumSubsets             uint16
+
+	NumHighQualityLODs byte
+	Unused             byte
 }
 
 type MeshStruct struct {
@@ -117,27 +127,40 @@ func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
 	Version := GetMeshVersion(MeshBytes)
 	VersionFloat := VersionToFloat(Version)
 
-	if VersionFloat > 300 {
-		return MeshStruct{Valid: false}
-	}
-
 	Mesh := MeshStruct{Valid: true}
 	Reader := bytes.NewReader(MeshBytes)
 
 	ReadBytes(Reader, 13) //VERSION HEADER
 
 	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_MeshHeader)
-	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_Vertex)
-	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_Face)
+
+	if VersionFloat >= 4.00 {
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.LodType)
+	} else {
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_Vertex)
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_Face)
+	}
 
 	if VersionFloat >= 3.00 {
-		println(VersionFloat)
-		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_LOD)
+		if VersionFloat < 4.00 {
+			binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_LOD)
+		}
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumLODs)
 	}
 
 	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumVerts)
+	ReadBytes(Reader, 16)
 	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumFaces)
+	ReadBytes(Reader, 16)
+
+	if VersionFloat >= 4.00 {
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_boneNamesBuffer)
+		ReadBytes(Reader, 16)
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumSubsets)
+		ReadBytes(Reader, 16)
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumHighQualityLODs)
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Unused)
+	}
 
 	Vertices := make([]VerticesStruct, int(Mesh.Header.NumVerts))
 
@@ -153,7 +176,7 @@ func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
 
 		binary.Read(Reader, binary.LittleEndian, &Vertex.Tangent)
 
-		if Version == "2.00" && Mesh.Header.Sizeof_Vertex == 36 {
+		if (Version == "2.00" || Version == "3.00") && Mesh.Header.Sizeof_Vertex == 36 {
 			Vertex.Color = [4]byte{255, 255, 255, 255}
 		} else {
 			binary.Read(Reader, binary.LittleEndian, &Vertex.Color)

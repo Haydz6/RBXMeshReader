@@ -11,7 +11,7 @@ type Vector3 [3]float32
 type Vector2 [2]float32
 
 type FaceStruct [3]uint16
-type LODStruct []uint
+type LODStruct []uint16
 
 type VerticesStruct struct {
 	//VERSION 2.00
@@ -22,6 +22,40 @@ type VerticesStruct struct {
 	//VERSION 3.00
 	Tangent [4]byte
 	Color   [4]byte
+}
+
+type EnvelopeStruct struct {
+	Bones   [4]byte
+	Weights [4]byte
+}
+
+type BoneStruct struct {
+	BoneNameIndex uint16
+
+	ParentIndex    uint16
+	LodParentIndex uint16
+
+	Culling float32
+
+	Matrix1 Vector3
+	Matrix2 Vector3
+	Matrix3 Vector3
+
+	Position Vector3
+}
+
+type MeshSubsetStruct struct {
+	FacesBegin  uint16
+	FacesLength uint16
+
+	VertsBegin  uint16
+	VertsLength uint16
+
+	NumBonesIndices uint16
+	BoneIndices     [26]uint16
+}
+
+type FacsDataStruct struct {
 }
 
 type MeshHeaderStruct struct {
@@ -48,15 +82,26 @@ type MeshHeaderStruct struct {
 
 	NumHighQualityLODs byte
 	Unused             byte
+
+	FacsDataFormat uint32
+	FacsDataSize   uint16
 }
 
 type MeshStruct struct {
 	Valid  bool
 	Header MeshHeaderStruct
 
-	Vertices []VerticesStruct
-	Faces    []FaceStruct
-	LODs     []uint
+	Vertices  []VerticesStruct
+	Envelopes []EnvelopeStruct
+
+	Faces []FaceStruct
+	LODs  LODStruct
+
+	Bones     []BoneStruct
+	NameTable []byte
+
+	MeshSubset []MeshSubsetStruct
+	//FacsDataBuffer
 }
 
 func ReadBytes(Reader *bytes.Reader, BytesToRead int) []byte {
@@ -144,8 +189,8 @@ func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
 	if VersionFloat >= 3.00 {
 		if VersionFloat < 4.00 {
 			binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_LOD)
+			binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumLODs)
 		}
-		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumLODs)
 	}
 
 	binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumVerts)
@@ -154,10 +199,11 @@ func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
 	ReadBytes(Reader, 2)
 
 	if VersionFloat >= 4.00 {
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumLODs)
+		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumBones)
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Sizeof_boneNamesBuffer)
 		ReadBytes(Reader, 2)
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumSubsets)
-		ReadBytes(Reader, 2)
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.NumHighQualityLODs)
 		binary.Read(Reader, binary.LittleEndian, &Mesh.Header.Unused)
 	}
@@ -185,25 +231,92 @@ func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
 		Vertices[i] = Vertex
 	}
 
+	if VersionFloat >= 4.00 && Mesh.Header.NumBones > 0 {
+		Envelopes := make([]EnvelopeStruct, int(Mesh.Header.NumVerts))
+
+		for i := 0; i < int(Mesh.Header.NumFaces); i++ {
+			Envelope := EnvelopeStruct{}
+			binary.Read(Reader, binary.LittleEndian, &Envelope)
+			Envelopes[i] = Envelope
+		}
+
+		Mesh.Envelopes = Envelopes
+	}
+
 	Faces := make([]FaceStruct, int(Mesh.Header.NumFaces))
 
 	for i := 0; i < int(Mesh.Header.NumFaces); i++ {
 		Face := FaceStruct{}
 		binary.Read(Reader, binary.LittleEndian, &Face)
+		ReadBytes(Reader, 2)
+
 		Faces[i] = Face
 	}
 
 	if VersionFloat >= 3.00 {
 		LODs := make(LODStruct, int(Mesh.Header.NumLODs))
 		binary.Read(Reader, binary.LittleEndian, &LODs)
+		ReadBytes(Reader, 2)
 
 		Mesh.LODs = LODs
 	}
+
+	if VersionFloat >= 4.00 {
+		Bones := make([]BoneStruct, Mesh.Header.NumBones)
+
+		for i := 0; i < int(Mesh.Header.NumBones); i++ {
+			Bone := BoneStruct{}
+
+			binary.Read(Reader, binary.LittleEndian, &Bone.BoneNameIndex)
+			ReadBytes(Reader, 2)
+
+			binary.Read(Reader, binary.LittleEndian, &Bone.BoneNameIndex)
+			binary.Read(Reader, binary.LittleEndian, &Bone.ParentIndex)
+			binary.Read(Reader, binary.LittleEndian, &Bone.LodParentIndex)
+			binary.Read(Reader, binary.LittleEndian, &Bone.Culling)
+			binary.Read(Reader, binary.LittleEndian, &Bone.Matrix1)
+			binary.Read(Reader, binary.LittleEndian, &Bone.Matrix2)
+			binary.Read(Reader, binary.LittleEndian, &Bone.Matrix3)
+			binary.Read(Reader, binary.LittleEndian, &Bone.Position)
+
+			Bones[i] = Bone
+		}
+
+		Mesh.Bones = Bones
+
+		MeshSubsets := make([]MeshSubsetStruct, Mesh.Header.NumSubsets)
+
+		for i := 0; i < int(Mesh.Header.NumSubsets); i++ {
+			MeshSubset := MeshSubsetStruct{}
+
+			binary.Read(Reader, binary.LittleEndian, &MeshSubset.FacesBegin)
+			ReadBytes(Reader, 2)
+			binary.Read(Reader, binary.LittleEndian, &MeshSubset.FacesLength)
+			ReadBytes(Reader, 2)
+
+			binary.Read(Reader, binary.LittleEndian, &MeshSubset.VertsBegin)
+			ReadBytes(Reader, 2)
+			binary.Read(Reader, binary.LittleEndian, &MeshSubset.VertsLength)
+			ReadBytes(Reader, 2)
+
+			binary.Read(Reader, binary.LittleEndian, &MeshSubset.NumBonesIndices)
+			ReadBytes(Reader, 2)
+			binary.Read(Reader, binary.LittleEndian, &MeshSubset.BoneIndices)
+
+			MeshSubsets[i] = MeshSubset
+		}
+
+		Mesh.MeshSubset = MeshSubsets
+	}
+
+	//Bone Names Buffer
 
 	Mesh.Vertices = Vertices
 	Mesh.Faces = Faces
 
 	Mesh.Header.Version = Version
+
+	println(Reader.Size(), Reader.Len())
 
 	return Mesh
 }

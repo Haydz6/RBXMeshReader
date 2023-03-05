@@ -2,19 +2,19 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"path"
 )
 
 func main() {
-	Files, err := ioutil.ReadDir(path.Join(".", "files", "meshes"))
+	Files, err := os.ReadDir(path.Join(".", "files", "meshes"))
 
 	if err != nil {
 		panic(err.Error())
 	}
 
 	for _, File := range Files {
-		Binary, err := ioutil.ReadFile(path.Join(".", "files", "meshes", File.Name()))
+		Binary, err := os.ReadFile(path.Join(".", "files", "meshes", File.Name()))
 
 		if err != nil {
 			panic(err.Error())
@@ -27,7 +27,7 @@ func main() {
 			panic(JSONErr.Error())
 		}
 
-		WriteErr := ioutil.WriteFile(path.Join(".", "files", "output", File.Name()), MeshBytes, 0677)
+		WriteErr := os.WriteFile(path.Join(".", "files", "output", File.Name()), MeshBytes, 0677)
 
 		if WriteErr != nil {
 			panic(WriteErr.Error())

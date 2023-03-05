@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"io/ioutil"
-	"path"
 	"strconv"
 	"strings"
 )
@@ -34,8 +32,8 @@ type MeshHeaderStruct struct {
 	Sizeof_Vertex     byte
 	Sizeof_Face       byte
 
-	NumVerts uint
-	NumFaces uint
+	NumVerts uint16
+	NumFaces uint16
 
 	//VERSION 3.00
 	Sizeof_LOD uint16
@@ -76,19 +74,12 @@ func ReadASCIIMesh(Mesh []byte) MeshStruct {
 	Data := strings.Split(MeshData, "\n")
 
 	Version := GetMeshVersion(Mesh)
-	NumFaces, err := strconv.Atoi(strings.ReplaceAll(Data[1], "\r", ""))
-
-	if err != nil {
-		println(err.Error())
-		return MeshStruct{Valid: false}
-	}
+	NumFaces, _ := strconv.Atoi(strings.ReplaceAll(Data[1], "\r", ""))
 
 	var Vertices VerticesStruct
 	Progress := 0
 
 	AllVertices := make([]VerticesStruct, NumFaces*3)
-
-	ioutil.WriteFile(path.Join(".", "debug.txt"), []byte(Data[2][1:][:len(Data[2])-2]), 0677)
 
 	for i, Vector := range strings.Split(Data[2][1:][:len(Data[2])-1], "][") {
 		Coordinates := strings.Split(Vector, ",")
@@ -119,7 +110,7 @@ func ReadASCIIMesh(Mesh []byte) MeshStruct {
 		}
 	}
 
-	return MeshStruct{Header: MeshHeaderStruct{Version: Version, NumFaces: uint(NumFaces)}, Vertices: AllVertices, Valid: true}
+	return MeshStruct{Header: MeshHeaderStruct{Version: Version, NumFaces: uint16(NumFaces)}, Vertices: AllVertices, Valid: true}
 }
 
 func ReadBinaryMesh(MeshBytes []byte) MeshStruct {
